@@ -1,3 +1,4 @@
+import Link from "next/link";
 import BusinessMap from "@/components/BusinessMap";
 import businessMapData from "@/data/businessMap.json";
 import { BusinessMapData } from "@/types";
@@ -13,20 +14,12 @@ export default function Home() {
               各セルをクリックして AI 活用のアイデアを確認・投稿できます
             </p>
           </div>
-          <div className="flex items-center gap-4 text-xs text-gray-500">
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
-              💡 アイデア
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
-              💬 コメント
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
-              📎 ファイル
-            </span>
-          </div>
+          <Link
+            href="/resources"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            📎 AI活用事例・手順書
+          </Link>
         </div>
       </header>
 

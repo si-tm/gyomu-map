@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, MessageSquare, Paperclip, Lightbulb, ThumbsUp, Star } from "lucide-react";
+import Link from "next/link";
+import { X, MessageSquare, Paperclip, Lightbulb, ThumbsUp, Star, ExternalLink } from "lucide-react";
 import { CellData } from "@/types";
 
 interface Props {
@@ -228,9 +229,10 @@ export default function CellModal({ rowLabel, colLabel, cellData, onClose }: Pro
           {tab === "attachments" && (
             <div className="space-y-3">
               {data.attachments.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-6">
-                  添付ファイルはまだありません
-                </p>
+                <div className="text-center py-8">
+                  <Paperclip className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                  <p className="text-sm text-gray-400">添付ファイルはまだありません</p>
+                </div>
               ) : (
                 <ul className="space-y-2">
                   {data.attachments.map((f) => (
@@ -257,17 +259,15 @@ export default function CellModal({ rowLabel, colLabel, cellData, onClose }: Pro
                 </ul>
               )}
 
-              {/* Upload area (UI placeholder — backend integration in Phase 2) */}
-              <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors mt-2">
-                <Paperclip className="w-6 h-6 text-gray-300 mb-1" />
-                <span className="text-sm text-gray-400">ファイルをアップロード</span>
-                <span className="text-xs text-gray-300 mt-0.5">HTML · PDF · Excel · Word</span>
-                <input
-                  type="file"
-                  className="hidden"
-                  accept=".html,.pdf,.xlsx,.xls,.docx,.doc"
-                />
-              </label>
+              {/* AI活用事例ページへのリンク */}
+              <Link
+                href="/resources"
+                className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-blue-200 rounded-xl text-sm text-blue-600 hover:bg-blue-50 hover:border-blue-400 transition-colors"
+                onClick={() => {/* モーダルを閉じる場合は onClose を呼ぶ */}}
+              >
+                <ExternalLink className="w-4 h-4" />
+                AI活用事例・手順書ページでHTMLをアップロード
+              </Link>
             </div>
           )}
         </div>

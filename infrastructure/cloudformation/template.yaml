@@ -1,147 +1,51 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  業務マップ AI活用共有サイト — インフラ一式
-  構成: S3(ホスティング) + CloudFront + S3(アップロード) + DynamoDB + Lambda + API Gateway
+  業務マップ AI活用 — シンプル構成
+  S3 静的ホスティング + Lambda Function URL (プリサインURL生成) のみ
 
 Parameters:
   ProjectName:
     Type: String
     Default: gyomu-map
-    Description: リソース名のプレフィックス
 
-  Environment:
-    Type: String
-    Default: prod
-    AllowedValues: [prod, dev]
-
-# ---------------------------------------------------------------------------
-# Resources
-# ---------------------------------------------------------------------------
 Resources:
 
-  # ---------- S3: 静的サイトホスティング ----------
-  WebsiteBucket:
+  # ---------- S3: サイトホスティング + アップロードファイル保存 ----------
+  GyomuMapBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${ProjectName}-website-${AWS::AccountId}"
+      BucketName: !Sub "${ProjectName}-${AWS::AccountId}"
       PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-
-  WebsiteBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: !Ref WebsiteBucket
-      PolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: cloudfront.amazonaws.com
-            Action: s3:GetObject
-            Resource: !Sub "${WebsiteBucket.Arn}/*"
-            Condition:
-              StringEquals:
-                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
-
-  # ---------- S3: ファイルアップロード用 ----------
-  UploadBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "${ProjectName}-uploads-${AWS::AccountId}"
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
       CorsConfiguration:
         CorsRules:
           - AllowedHeaders: ["*"]
-            AllowedMethods: [GET, PUT, POST, DELETE]
+            AllowedMethods: [GET, PUT, POST, HEAD]
             AllowedOrigins: ["*"]
             MaxAge: 3000
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      LifecycleConfiguration:
-        Rules:
-          # 未完了マルチパートアップロードを7日後に削除（コスト最適化）
-          - Id: CleanupIncompleteMultipart
-            Status: Enabled
-            AbortIncompleteMultipartUpload:
-              DaysAfterInitiation: 7
 
-  # ---------- CloudFront ----------
-  CloudFrontOAC:
-    Type: AWS::CloudFront::OriginAccessControl
+  GyomuMapBucketPolicy:
+    Type: AWS::S3::BucketPolicy
     Properties:
-      OriginAccessControlConfig:
-        Name: !Sub "${ProjectName}-oac"
-        OriginAccessControlOriginType: s3
-        SigningBehavior: always
-        SigningProtocol: sigv4
+      Bucket: !Ref GyomuMapBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${GyomuMapBucket.Arn}/*"
 
-  CloudFrontDistribution:
-    Type: AWS::CloudFront::Distribution
-    Properties:
-      DistributionConfig:
-        Enabled: true
-        HttpVersion: http2
-        PriceClass: PriceClass_100   # 北米+欧州+アジア — 最安クラス
-        DefaultRootObject: index.html
-        Origins:
-          - Id: S3Origin
-            DomainName: !GetAtt WebsiteBucket.RegionalDomainName
-            OriginAccessControlId: !GetAtt CloudFrontOAC.Id
-            S3OriginConfig: {}
-        DefaultCacheBehavior:
-          TargetOriginId: S3Origin
-          ViewerProtocolPolicy: redirect-to-https
-          AllowedMethods: [GET, HEAD, OPTIONS]
-          # Managed-CachingOptimized (キャッシュ最大化)
-          CachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6"
-        CustomErrorResponses:
-          # SPA用: 404→index.html にフォールバック
-          - ErrorCode: 403
-            ResponseCode: 200
-            ResponsePagePath: /index.html
-          - ErrorCode: 404
-            ResponseCode: 200
-            ResponsePagePath: /index.html
-
-  # ---------- DynamoDB: コメント ----------
-  CommentsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub "${ProjectName}-comments"
-      BillingMode: PAY_PER_REQUEST   # 社内80人規模: 従量課金が最安
-      AttributeDefinitions:
-        - AttributeName: cellId
-          AttributeType: S
-        - AttributeName: commentId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: cellId
-          KeyType: HASH
-        - AttributeName: commentId
-          KeyType: RANGE
-
-  # ---------- DynamoDB: リアクション ----------
-  ReactionsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub "${ProjectName}-reactions"
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: cellId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: cellId
-          KeyType: HASH
-
-  # ---------- IAM: Lambda実行ロール ----------
-  LambdaRole:
+  # ---------- Lambda: プリサインURL生成 + ファイル一覧 ----------
+  UploadLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${ProjectName}-lambda-role"
+      RoleName: !Sub "${ProjectName}-upload-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -152,128 +56,126 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: AppAccess
+        - PolicyName: S3Access
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
-                  - dynamodb:GetItem
-                  - dynamodb:PutItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:DeleteItem
-                  - dynamodb:Query
-                  - dynamodb:Scan
-                Resource:
-                  - !GetAtt CommentsTable.Arn
-                  - !GetAtt ReactionsTable.Arn
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
                   - s3:PutObject
-                  - s3:DeleteObject
-                Resource: !Sub "${UploadBucket.Arn}/*"
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt GyomuMapBucket.Arn
+                  - !Sub "${GyomuMapBucket.Arn}/uploads/*"
 
-  # ---------- Lambda: API ----------
-  ApiFunction:
+  UploadLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub "${ProjectName}-api"
-      Runtime: nodejs20.x
+      FunctionName: !Sub "${ProjectName}-upload"
+      Runtime: python3.12
       Handler: index.handler
-      Role: !GetAtt LambdaRole.Arn
+      Role: !GetAtt UploadLambdaRole.Arn
       Timeout: 30
-      MemorySize: 256
       Environment:
         Variables:
-          COMMENTS_TABLE: !Ref CommentsTable
-          REACTIONS_TABLE: !Ref ReactionsTable
-          UPLOAD_BUCKET: !Ref UploadBucket
-          CORS_ORIGIN: !Sub "https://${CloudFrontDistribution.DomainName}"
-      # Phase 1 プレースホルダー — 実装は infrastructure/lambda/ に追加予定
+          BUCKET_NAME: !Ref GyomuMapBucket
+          BUCKET_REGION: !Ref AWS::Region
       Code:
         ZipFile: |
-          exports.handler = async (event) => {
-            const origin = process.env.CORS_ORIGIN || '*';
-            const headers = {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': origin,
-              'Access-Control-Allow-Headers': 'Content-Type',
-              'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-            };
-            if (event.requestContext?.http?.method === 'OPTIONS') {
-              return { statusCode: 204, headers, body: '' };
-            }
-            return {
-              statusCode: 200,
-              headers,
-              body: JSON.stringify({ message: 'API placeholder — Phase 2 で実装予定' }),
-            };
-          };
+          import json, os, re, boto3
+          from datetime import datetime, timezone
 
-  # ---------- API Gateway (HTTP API) ----------
-  HttpApi:
-    Type: AWS::ApiGatewayV2::Api
+          s3 = boto3.client('s3')
+          BUCKET = os.environ['BUCKET_NAME']
+          REGION = os.environ['BUCKET_REGION']
+          SITE = f'http://{BUCKET}.s3-website-{REGION}.amazonaws.com'
+
+          CORS = {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Headers': 'Content-Type',
+              'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+          }
+
+          def handler(event, context):
+              method = event.get('requestContext', {}).get('http', {}).get('method', 'GET')
+
+              if method == 'OPTIONS':
+                  return {'statusCode': 204, 'headers': CORS, 'body': ''}
+
+              # GET: アップロード済みファイル一覧
+              if method == 'GET':
+                  result = s3.list_objects_v2(Bucket=BUCKET, Prefix='uploads/')
+                  files = []
+                  for item in result.get('Contents', []):
+                      key = item['Key']
+                      if key.endswith('/'):
+                          continue
+                      raw = key.replace('uploads/', '', 1)
+                      name = re.sub(r'^\d+-', '', raw)
+                      files.append({
+                          'key': key,
+                          'name': name,
+                          'url': f'{SITE}/{key}',
+                          'uploadedAt': item['LastModified'].isoformat(),
+                          'size': item['Size'],
+                      })
+                  files.sort(key=lambda x: x['uploadedAt'], reverse=True)
+                  return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'files': files})}
+
+              # POST: プリサインURL発行
+              if method == 'POST':
+                  body = json.loads(event.get('body') or '{}')
+                  filename = body.get('filename', 'upload.html')
+                  content_type = body.get('contentType', 'text/html')
+                  ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+                  key = f'uploads/{ts}-{filename}'
+                  upload_url = s3.generate_presigned_url(
+                      'put_object',
+                      Params={'Bucket': BUCKET, 'Key': key, 'ContentType': content_type},
+                      ExpiresIn=3600,
+                  )
+                  return {
+                      'statusCode': 200,
+                      'headers': CORS,
+                      'body': json.dumps({
+                          'uploadUrl': upload_url,
+                          'key': key,
+                          'publicUrl': f'{SITE}/{key}',
+                      }),
+                  }
+
+              return {'statusCode': 405, 'headers': CORS, 'body': json.dumps({'error': 'Method not allowed'})}
+
+  UploadLambdaUrl:
+    Type: AWS::Lambda::Url
     Properties:
-      Name: !Sub "${ProjectName}-api"
-      ProtocolType: HTTP
-      CorsConfiguration:
-        AllowHeaders: ["Content-Type", "Authorization"]
-        AllowMethods: [GET, POST, PUT, DELETE, OPTIONS]
-        AllowOrigins:
-          - !Sub "https://${CloudFrontDistribution.DomainName}"
+      TargetFunctionArn: !Ref UploadLambda
+      AuthType: NONE
+      Cors:
+        AllowOrigins: ["*"]
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders: ["content-type"]
         MaxAge: 300
 
-  ApiIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref HttpApi
-      IntegrationType: AWS_PROXY
-      IntegrationUri: !GetAtt ApiFunction.Arn
-      PayloadFormatVersion: "2.0"
-
-  ApiRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref HttpApi
-      RouteKey: "$default"
-      Target: !Sub "integrations/${ApiIntegration}"
-
-  ApiStage:
-    Type: AWS::ApiGatewayV2::Stage
-    Properties:
-      ApiId: !Ref HttpApi
-      StageName: "$default"
-      AutoDeploy: true
-
-  LambdaApiPermission:
+  UploadLambdaUrlPermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref ApiFunction
-      Action: lambda:InvokeFunction
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+      FunctionName: !Ref UploadLambda
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
 
-# ---------------------------------------------------------------------------
-# Outputs
 # ---------------------------------------------------------------------------
 Outputs:
   WebsiteURL:
-    Description: サイトのURL（ブラウザ / Teamsタブに貼る）
-    Value: !Sub "https://${CloudFrontDistribution.DomainName}"
+    Description: サイトURL（ブラウザ / Teamsタブに貼る）
+    Value: !Sub "http://${GyomuMapBucket}.s3-website-${AWS::Region}.amazonaws.com"
 
-  ApiEndpoint:
-    Description: API GatewayのエンドポイントURL（フロントエンドの環境変数 NEXT_PUBLIC_API_URL に設定）
-    Value: !GetAtt HttpApi.ApiEndpoint
+  UploadApiUrl:
+    Description: Lambda Function URL → 環境変数 NEXT_PUBLIC_UPLOAD_API_URL に設定する
+    Value: !GetAtt UploadLambdaUrl.FunctionUrl
 
-  WebsiteBucketName:
-    Description: フロントエンドデプロイ先（npm run build → aws s3 sync out/ s3://<この値>/）
-    Value: !Ref WebsiteBucket
-
-  UploadBucketName:
-    Description: ファイルアップロード先S3バケット
-    Value: !Ref UploadBucket
-
-  CloudFrontId:
-    Description: CloudFront Distribution ID（デプロイ後にキャッシュ無効化で使用）
-    Value: !Ref CloudFrontDistribution
+  BucketName:
+    Description: S3バケット名（npm run build → aws s3 sync out/ s3://<この値>/）
+    Value: !Ref GyomuMapBucket
