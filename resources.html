@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI活用事例・手順書 | 業務マップ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
+    <div class="max-w-screen-xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+      <div>
+        <a href="index.html" class="text-sm text-blue-600 hover:underline mb-1 block">← 業務マップに戻る</a>
+        <h1 class="text-xl font-bold text-gray-900">AI活用事例・手順書</h1>
+        <p class="text-xs text-gray-500 mt-0.5">HTML ファイルをアップロードすると全員が閲覧できます</p>
+      </div>
+      <button id="uploadBtn" onclick="document.getElementById('fileInput').click()"
+        class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+        ⬆ HTML をアップロード
+      </button>
+      <input type="file" id="fileInput" accept=".html,.htm" class="hidden" onchange="handleUpload(this)">
+    </div>
+  </header>
+
+  <div class="max-w-screen-xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+    <div id="notice" class="hidden p-4 rounded-xl text-sm"></div>
+    <div id="fileList">
+      <p class="text-center text-gray-400 py-16">読み込み中...</p>
+    </div>
+  </div>
+
+<script>
+  // CloudFormation Outputs の UploadApiUrl をここに設定
+  const API_URL = 'https://p4ndxf6almtjbu3fzfhyl3je6q0blsnm.lambda-url.ap-northeast-1.on.aws/';
+
+  async function loadFiles() {
+    try {
+      const res = await fetch(API_URL);
+      const { files = [] } = await res.json();
+      renderFiles(files);
+    } catch {
+      document.getElementById('fileList').innerHTML =
+        '<p class="text-red-400 text-center py-16">ファイル一覧の取得に失敗しました</p>';
+    }
+  }
+
+  function renderFiles(files) {
+    const el = document.getElementById('fileList');
+    if (files.length === 0) {
+      el.innerHTML = `
+        <div class="text-center py-20">
+          <div class="text-5xl mb-4">📄</div>
+          <p class="text-gray-400 font-medium">まだファイルがありません</p>
+          <p class="text-sm text-gray-300 mt-1">「HTML をアップロード」から AI活用の手順書や事例を追加しましょう</p>
+        </div>`;
+      return;
+    }
+    el.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      ${files.map(f => `
+        <a href="${escA(f.url)}" target="_blank" rel="noopener noreferrer"
+           class="group block bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-md transition-all"
+           style="text-decoration:none;">
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-xl shrink-0">🌐</div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-gray-800 truncate group-hover:text-blue-600 transition-colors">${esc(f.name)}</p>
+              <p class="text-xs text-gray-400 mt-0.5">${fmtDate(f.uploadedAt)} · ${fmtSize(f.size)}</p>
+            </div>
+            <span class="text-gray-300 group-hover:text-blue-400 transition-colors shrink-0 mt-0.5 text-sm">↗</span>
+          </div>
+        </a>`).join('')}
+    </div>`;
+  }
+
+  async function handleUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const btn = document.getElementById('uploadBtn');
+    btn.textContent = 'アップロード中...';
+    btn.disabled = true;
+    hideNotice();
+
+    try {
+      // 1. Lambda からプリサイン URL を取得
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, contentType: file.type || 'text/html' }),
+      });
+      const { uploadUrl } = await res.json();
+
+      // 2. S3 へ直接アップロード
+      await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type || 'text/html' },
+      });
+
+      showNotice('success', `「${file.name}」をアップロードしました`);
+      input.value = '';
+      await loadFiles();
+    } catch {
+      showNotice('error', 'アップロードに失敗しました。しばらく待ってから再試行してください。');
+    } finally {
+      btn.textContent = '⬆ HTML をアップロード';
+      btn.disabled = false;
+    }
+  }
+
+  function showNotice(type, msg) {
+    const el = document.getElementById('notice');
+    el.classList.remove('hidden');
+    el.className = type === 'success'
+      ? 'p-4 rounded-xl text-sm bg-green-50 border border-green-200 text-green-800'
+      : 'p-4 rounded-xl text-sm bg-red-50 border border-red-200 text-red-800';
+    el.textContent = msg;
+  }
+  function hideNotice() {
+    document.getElementById('notice').classList.add('hidden');
+  }
+
+  function esc(s)  { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function escA(s) { return String(s).replace(/"/g,'&quot;'); }
+  function fmtDate(iso) { return new Date(iso).toLocaleDateString('ja-JP',{year:'numeric',month:'short',day:'numeric'}); }
+  function fmtSize(b) {
+    if (b < 1024) return `${b} B`;
+    if (b < 1024*1024) return `${(b/1024).toFixed(1)} KB`;
+    return `${(b/1024/1024).toFixed(1)} MB`;
+  }
+
+  loadFiles();
+</script>
+</body>
+</html>

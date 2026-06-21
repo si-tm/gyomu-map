@@ -1,0 +1,83 @@
+{
+  "rows": [
+    {
+      "id": "tama-kanshi",
+      "label": "多摩監視",
+      "color": "text-blue-700",
+      "bgColor": "bg-blue-50",
+      "headerBg": "bg-blue-600"
+    },
+    {
+      "id": "gyomu-chosa",
+      "label": "業務調査",
+      "color": "text-emerald-700",
+      "bgColor": "bg-emerald-50",
+      "headerBg": "bg-emerald-600"
+    },
+    {
+      "id": "unyo-sagyo",
+      "label": "運用作業",
+      "color": "text-amber-700",
+      "bgColor": "bg-amber-50",
+      "headerBg": "bg-amber-500"
+    },
+    {
+      "id": "naibu-gyomu",
+      "label": "内部業務",
+      "color": "text-purple-700",
+      "bgColor": "bg-purple-50",
+      "headerBg": "bg-purple-600"
+    }
+  ],
+  "columns": [
+    { "id": "kanri-keikaku", "label": "1 管理/計画" },
+    { "id": "uketsuke-kakunin", "label": "2 受付/確認" },
+    { "id": "irai-chosei", "label": "3 作業依頼/調整" },
+    { "id": "jissagyo", "label": "4 実作業" },
+    { "id": "hokoku-bunseki", "label": "5 報告/分析" }
+  ],
+  "cells": {
+    "tama-kanshi__kanri-keikaku": {
+      "tasks": [
+        { "id": "t1", "label": "監視計画の策定・更新" },
+        { "id": "t2", "label": "監視ルールの管理" }
+      ],
+      "comments": [
+        {
+          "id": "c1",
+          "author": "山田",
+          "content": "AIで異常検知パターンを自動学習させれば、ルール管理コストが下がりそう。過去のアラートデータを学習させてみたい。",
+          "createdAt": "2026-06-15T10:00:00.000Z"
+        }
+      ],
+      "attachments": [],
+      "reactions": { "idea": 3, "good": 2, "want": 4 },
+      "aiSummary": "異常検知の自動化・ルール最適化にAIを活用できる可能性があります。"
+    },
+    "tama-kanshi__hokoku-bunseki": {
+      "tasks": [
+        { "id": "t3", "label": "月次監視レポート作成" },
+        { "id": "t4", "label": "トレンド分析" }
+      ],
+      "comments": [],
+      "attachments": [],
+      "reactions": { "idea": 1, "good": 0, "want": 2 }
+    },
+    "naibu-gyomu__kanri-keikaku": {
+      "tasks": [
+        { "id": "t5", "label": "スケジュール管理" },
+        { "id": "t6", "label": "議事録作成・管理" }
+      ],
+      "comments": [
+        {
+          "id": "c2",
+          "author": "鈴木",
+          "content": "会議の録音からAIで自動議事録を生成できれば大幅に時短できる。MS Copilotが使えるか確認したい。",
+          "createdAt": "2026-06-18T14:30:00.000Z"
+        }
+      ],
+      "attachments": [],
+      "reactions": { "idea": 5, "good": 3, "want": 6 }
+    }
+  }
+}
