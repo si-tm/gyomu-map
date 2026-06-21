@@ -154,7 +154,7 @@ Resources:
       AuthType: NONE
       Cors:
         AllowOrigins: ["*"]
-        AllowMethods: [GET, POST, OPTIONS]
+        AllowMethods: ["GET", "POST"]
         AllowHeaders: ["content-type"]
         MaxAge: 300
 
